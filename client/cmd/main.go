@@ -41,10 +41,10 @@ func main() {
 	ebiten.SetWindowTitle("Game of Life")
 
 	conn, respColor, err := websocket.DefaultDialer.Dial("ws://127.0.0.1:3000/", nil)
+
 	if err != nil {
 		logrus.Fatal(err)
 	}
-	defer conn.Close()
 
 	cellColor, err := getHeaderColor(respColor)
 	if err != nil {
@@ -52,9 +52,9 @@ func main() {
 	}
 
 	game := client.NewGame(screenWidth, screenHeight, cellColor, conn)
+	defer game.Conn.Close()
 
 	go func() {
-		defer game.Conn.Close()
 		for {
 			var newPixel client.PixelValidate
 			if err := game.Conn.ReadJSON(&newPixel); err != nil {

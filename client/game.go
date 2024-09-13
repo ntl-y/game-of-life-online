@@ -35,9 +35,9 @@ func (g *Game) PaintPlayer() {
 			currPixelRight := g.indexOfPixel(mx+1, my)
 
 			g.Mu.Lock()
-			g.World.Paint(g.Pixels, currPixel, mx, my, g.PlayerColor)
-			g.World.Paint(g.Pixels, currPixelUp, mx, my+1, g.PlayerColor)
-			g.World.Paint(g.Pixels, currPixelRight, mx+1, my, g.PlayerColor)
+			g.World.PaintPixel(g.Pixels, currPixel, mx, my, g.PlayerColor)
+			g.World.PaintPixel(g.Pixels, currPixelUp, mx, my+1, g.PlayerColor)
+			g.World.PaintPixel(g.Pixels, currPixelRight, mx+1, my, g.PlayerColor)
 			g.Mu.Unlock()
 
 			err := g.Conn.WriteJSON(PixelValidate{
@@ -55,15 +55,16 @@ func (g *Game) PaintPlayer() {
 }
 
 func (g *Game) PaintEnemy(mx, my int, color []byte) {
+
 	if mx >= 0 && mx < g.World.width && my >= 0 && my < g.World.height {
 		currPixel := g.indexOfPixel(mx, my)
 		currPixelUp := g.indexOfPixel(mx, my+1)
 		currPixelRight := g.indexOfPixel(mx+1, my)
 
 		g.Mu.Lock()
-		g.World.Paint(g.Pixels, currPixel, mx, my, color)
-		g.World.Paint(g.Pixels, currPixelUp, mx, my+1, color)
-		g.World.Paint(g.Pixels, currPixelRight, mx+1, my, color)
+		g.World.PaintPixel(g.Pixels, currPixel, mx, my, color)
+		g.World.PaintPixel(g.Pixels, currPixelUp, mx, my+1, color)
+		g.World.PaintPixel(g.Pixels, currPixelRight, mx+1, my, color)
 		g.Mu.Unlock()
 	}
 }
@@ -79,8 +80,9 @@ func (g *Game) Update() error {
 
 func (g *Game) Draw(screen *ebiten.Image) {
 	g.Mu.Lock()
-	g.World.DrawPixels(g.Pixels)
+	g.World.CellsToPixels(g.Pixels)
 	g.Mu.Unlock()
+
 	screen.WritePixels(g.Pixels)
 }
 

@@ -33,12 +33,12 @@ func (w *World) indexInArea(x, y int) int {
 	return y*w.width + x
 }
 
-func (w *World) Draw(index int, color []byte) {
+func (w *World) ColorCell(index int, color []byte) {
 	w.area[index] = true
 	w.colorMap[index] = color
 }
 
-func (w *World) Update() {
+func (w *World) UpdateCells() {
 	newArea := make([]bool, len(w.area))
 	newColorMap := make(map[int][]byte)
 
@@ -48,7 +48,7 @@ func (w *World) Update() {
 
 			if w.area[index] {
 				cellColor := w.colorMap[index]
-				neighbours := w.countNeighboursForAlive(x, y, cellColor)
+				neighbours := w.countNeighboursForAliveCells(x, y, cellColor)
 				if neighbours == 2 || neighbours == 3 {
 					newArea[index] = true
 					newColorMap[index] = cellColor
@@ -57,7 +57,7 @@ func (w *World) Update() {
 					newColorMap[index] = background
 				}
 			} else {
-				neighbours, color := w.countNeighboursForDead(x, y)
+				neighbours, color := w.countNeighboursForDeadCells(x, y)
 				if neighbours == 3 {
 					newArea[index] = true
 					newColorMap[index] = color
@@ -72,7 +72,7 @@ func (w *World) Update() {
 	w.colorMap = newColorMap
 }
 
-func (w *World) countNeighboursForAlive(x, y int, cellColor []byte) int {
+func (w *World) countNeighboursForAliveCells(x, y int, cellColor []byte) int {
 	neighbours := 0
 	directions := [][2]int{
 		{-1, -1}, {-1, 0}, {-1, 1},
@@ -93,7 +93,7 @@ func (w *World) countNeighboursForAlive(x, y int, cellColor []byte) int {
 	return neighbours
 }
 
-func (w *World) countNeighboursForDead(x, y int) (int, []byte) {
+func (w *World) countNeighboursForDeadCells(x, y int) (int, []byte) {
 	colorCount := make(map[string]int)
 	directions := [][2]int{
 		{-1, -1}, {-1, 0}, {-1, 1},
@@ -125,38 +125,36 @@ func (w *World) countNeighboursForDead(x, y int) (int, []byte) {
 }
 
 func (w *World) UpdatePixels(pixelArray []byte) {
-	w.Update()
-	w.DrawPixels(pixelArray)
+	w.UpdateCells()
+	w.CellsToPixels(pixelArray)
 
 }
 
-func indexOfPixel(x, y, screenWidth int) int {
-	return (y*screenWidth + x) * 4
-}
-
-func (w *World) DrawPixels(pixels []byte) {
+func (w *World) CellsToPixels(pixels []byte) {
 	for y := 0; y < w.height; y++ {
 		for x := 0; x < w.width; x++ {
 			pixelIndex := (y*w.width + x) * 4
 			index := w.indexInArea(x, y)
 			color := w.colorMap[index]
+			w.ColorPixel(pixels, pixelIndex, color)
 
-			pixels[pixelIndex+0] = color[0]
-			pixels[pixelIndex+1] = color[1]
-			pixels[pixelIndex+2] = color[2]
-			pixels[pixelIndex+3] = color[3]
 		}
 	}
 }
 
-func (w *World) Paint(pix []byte, pixelIndex int, x, y int, color []byte) {
+func (w *World) PaintPixel(pix []byte, pixelIndex int, x, y int, color []byte) {
 	if len(pix) > 0 && pixelIndex < len(pix) {
 		i := w.indexInArea(x, y)
-		w.Draw(i, color)
 
-		pix[pixelIndex] = color[0]
-		pix[pixelIndex+1] = color[1]
-		pix[pixelIndex+2] = color[2]
-		pix[pixelIndex+3] = color[3]
+		w.ColorCell(i, color)
+		w.ColorPixel(pix, pixelIndex, color)
+
 	}
+}
+
+func (w *World) ColorPixel(pixels []byte, pixelIndex int, color []byte) {
+	pixels[pixelIndex] = color[0]
+	pixels[pixelIndex+1] = color[1]
+	pixels[pixelIndex+2] = color[2]
+	pixels[pixelIndex+3] = color[3]
 }
