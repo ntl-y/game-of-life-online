@@ -1,7 +1,5 @@
 package client
 
-import "bytes"
-
 var background = []byte{byte(0), byte(0), byte(0), byte(1)}
 
 type World struct {
@@ -48,7 +46,7 @@ func (w *World) UpdateCells() {
 
 			if w.area[index] {
 				cellColor := w.colorMap[index]
-				neighbours := w.countNeighboursForAliveCells(x, y, cellColor)
+				neighbours := w.countNeighboursForAliveCells(x, y)
 				if neighbours == 2 || neighbours == 3 {
 					newArea[index] = true
 					newColorMap[index] = cellColor
@@ -58,7 +56,7 @@ func (w *World) UpdateCells() {
 				}
 			} else {
 				neighbours, color := w.countNeighboursForDeadCells(x, y)
-				if neighbours == 3 {
+				if neighbours == 3 && color != nil {
 					newArea[index] = true
 					newColorMap[index] = color
 				} else {
@@ -72,7 +70,7 @@ func (w *World) UpdateCells() {
 	w.colorMap = newColorMap
 }
 
-func (w *World) countNeighboursForAliveCells(x, y int, cellColor []byte) int {
+func (w *World) countNeighboursForAliveCells(x, y int) int {
 	neighbours := 0
 	directions := [][2]int{
 		{-1, -1}, {-1, 0}, {-1, 1},
@@ -84,8 +82,7 @@ func (w *World) countNeighboursForAliveCells(x, y int, cellColor []byte) int {
 		nx, ny := x+dir[0], y+dir[1]
 		if nx >= 0 && nx < w.width && ny >= 0 && ny < w.height {
 			neighbourIndex := w.indexInArea(nx, ny)
-			neighbourColor := w.colorMap[neighbourIndex]
-			if w.area[neighbourIndex] && bytes.Equal(neighbourColor, cellColor) {
+			if w.area[neighbourIndex] {
 				neighbours++
 			}
 		}
@@ -94,7 +91,10 @@ func (w *World) countNeighboursForAliveCells(x, y int, cellColor []byte) int {
 }
 
 func (w *World) countNeighboursForDeadCells(x, y int) (int, []byte) {
+	neighbours := 0
 	colorCount := make(map[string]int)
+	var dominantColor []byte
+
 	directions := [][2]int{
 		{-1, -1}, {-1, 0}, {-1, 1},
 		{0, -1}, {0, 1}, {1, -1},
@@ -106,22 +106,20 @@ func (w *World) countNeighboursForDeadCells(x, y int) (int, []byte) {
 		if nx >= 0 && nx < w.width && ny >= 0 && ny < w.height {
 			neighbourIndex := w.indexInArea(nx, ny)
 			if w.area[neighbourIndex] {
-				neighbourColor := w.colorMap[neighbourIndex]
-				colorKey := string(neighbourColor)
-				colorCount[colorKey]++
+				neighbours++
+				color := string(w.colorMap[neighbourIndex])
+				colorCount[color]++
+				if dominantColor == nil || colorCount[color] > colorCount[string(dominantColor)] {
+					dominantColor = w.colorMap[neighbourIndex]
+				}
 			}
 		}
 	}
 
-	var dominantColor []byte
-	maxCount := 0
-	for colorKey, count := range colorCount {
-		if count > maxCount {
-			maxCount = count
-			dominantColor = []byte(colorKey)
-		}
+	if neighbours == 3 && dominantColor != nil {
+		return neighbours, dominantColor
 	}
-	return maxCount, dominantColor
+	return neighbours, nil
 }
 
 func (w *World) UpdatePixels(pixelArray []byte) {
@@ -145,7 +143,6 @@ func (w *World) CellsToPixels(pixels []byte) {
 func (w *World) PaintPixel(pix []byte, pixelIndex int, x, y int, color []byte) {
 	if len(pix) > 0 && pixelIndex < len(pix) {
 		i := w.indexInArea(x, y)
-
 		w.ColorCell(i, color)
 		w.ColorPixel(pix, pixelIndex, color)
 

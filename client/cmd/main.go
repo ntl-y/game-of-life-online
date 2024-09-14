@@ -36,7 +36,7 @@ func getHeaderColor(r *http.Response) ([]byte, error) {
 }
 
 func main() {
-	ebiten.SetTPS(20)
+	ebiten.SetTPS(10)
 	ebiten.SetWindowSize(screenFrameWidth, screenFrameHeight)
 	ebiten.SetWindowTitle("Game of Life")
 
@@ -53,16 +53,6 @@ func main() {
 
 	game := client.NewGame(screenWidth, screenHeight, cellColor, conn)
 	defer game.Conn.Close()
-
-	go func() {
-		for {
-			var newPixel client.PixelValidate
-			if err := game.Conn.ReadJSON(&newPixel); err != nil {
-				logrus.Fatal(err)
-			}
-			game.PaintEnemy(newPixel.X, newPixel.Y, newPixel.Color)
-		}
-	}()
 
 	if err := ebiten.RunGame(game); err != nil {
 		log.Fatal(err)
