@@ -36,7 +36,7 @@ func getHeaderColor(r *http.Response) ([]byte, error) {
 }
 
 func main() {
-	ebiten.SetTPS(10)
+	ebiten.SetTPS(20)
 	ebiten.SetWindowSize(screenFrameWidth, screenFrameHeight)
 	ebiten.SetWindowTitle("Game of Life")
 
