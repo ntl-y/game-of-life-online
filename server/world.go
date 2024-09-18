@@ -1,4 +1,4 @@
-package client
+package server
 
 var background = []byte{byte(0), byte(0), byte(0), byte(1)}
 
@@ -31,12 +31,12 @@ func (w *World) indexInArea(x, y int) int {
 	return y*w.width + x
 }
 
-func (w *World) ColorCell(index int, color []byte) {
+func (w *World) colorCell(index int, color []byte) {
 	w.area[index] = true
 	w.colorMap[index] = color
 }
 
-func (w *World) UpdateCells() {
+func (w *World) updateCells() {
 	newArea := make([]bool, len(w.area))
 	newColorMap := make(map[int][]byte)
 
@@ -123,18 +123,18 @@ func (w *World) countNeighboursForDeadCells(x, y int) (int, []byte) {
 }
 
 func (w *World) UpdatePixels(pixelArray []byte) {
-	w.UpdateCells()
-	w.CellsToPixels(pixelArray)
+	w.updateCells()
+	w.cellsToPixels(pixelArray)
 
 }
 
-func (w *World) CellsToPixels(pixels []byte) {
+func (w *World) cellsToPixels(pixels []byte) {
 	for y := 0; y < w.height; y++ {
 		for x := 0; x < w.width; x++ {
 			pixelIndex := (y*w.width + x) * 4
 			index := w.indexInArea(x, y)
 			color := w.colorMap[index]
-			w.ColorPixel(pixels, pixelIndex, color)
+			w.colorPixel(pixels, pixelIndex, color)
 
 		}
 	}
@@ -143,13 +143,13 @@ func (w *World) CellsToPixels(pixels []byte) {
 func (w *World) PaintPixel(pix []byte, pixelIndex int, x, y int, color []byte) {
 	if len(pix) > 0 && pixelIndex < len(pix) {
 		i := w.indexInArea(x, y)
-		w.ColorCell(i, color)
-		w.ColorPixel(pix, pixelIndex, color)
+		w.colorCell(i, color)
+		w.colorPixel(pix, pixelIndex, color)
 
 	}
 }
 
-func (w *World) ColorPixel(pixels []byte, pixelIndex int, color []byte) {
+func (w *World) colorPixel(pixels []byte, pixelIndex int, color []byte) {
 	pixels[pixelIndex] = color[0]
 	pixels[pixelIndex+1] = color[1]
 	pixels[pixelIndex+2] = color[2]

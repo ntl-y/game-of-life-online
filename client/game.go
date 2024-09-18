@@ -8,110 +8,130 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-var deadPixel = []byte{byte(0), byte(0), byte(0), byte(1)}
+var (
+	allColors = GetAllColors()
+)
 
-type PixelValidate struct {
-	X     int    `json:"x"`
-	Y     int    `json:"y"`
-	Color []byte `json:"color"`
+type Message struct {
+	//slice of color indices
+	Data []uint8
+}
+
+type PixelMessage struct {
+	X            int `json:"x"`
+	Y            int `json:"y"`
+	IndexOfPixel int `json:"index"`
+	ColorIndex   int `json:"color"`
 }
 
 type Game struct {
-	World       *World
+	width       int
+	height      int
 	Pixels      []byte
 	PlayerColor []byte
+	ColorIndex  int
 	Mu          sync.Mutex
 	Conn        *websocket.Conn
 }
 
 func (g *Game) indexOfPixel(x, y int) int {
-	return (y*g.World.width + x) * 4
+	return (y*g.width + x) * 4
 }
 
-func (g *Game) PaintPlayer() {
+func colorIndicesToPixels(indices []uint8, colorPalette []Color) []byte {
+	pixels := make([]byte, 0, len(indices)*4)
 
-	mx, my := ebiten.CursorPosition()
-	if mx >= 0 && mx < g.World.width && my >= 0 && my < g.World.height {
+	for _, index := range indices {
+		color := colorPalette[index]
+		pixels = append(pixels, color...)
+	}
 
-		if ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) {
-			currPixel := g.indexOfPixel(mx, my)
-			currPixelUp := g.indexOfPixel(mx, my+1)
-			currPixelRight := g.indexOfPixel(mx+1, my)
+	return pixels
+}
 
-			g.Mu.Lock()
-			g.World.PaintPixel(g.Pixels, currPixel, mx, my, g.PlayerColor)
-			g.World.PaintPixel(g.Pixels, currPixelUp, mx, my+1, g.PlayerColor)
-			g.World.PaintPixel(g.Pixels, currPixelRight, mx+1, my, g.PlayerColor)
-			g.Mu.Unlock()
-
-			err := g.Conn.WriteJSON(PixelValidate{
-				X:     mx,
-				Y:     my,
-				Color: g.PlayerColor,
-			})
-
-			if err != nil {
-				logrus.Error("Error sending pixel data:", err)
-			}
-			logrus.Println("Sending pixel data from: ", g.Conn.LocalAddr())
-
-		}
-
+func (g *Game) ReadFromSocket() {
+	var message Message
+	if err := g.Conn.ReadJSON(&message); err != nil {
+		logrus.Error("Error sending pixel data:", err)
+	} else {
+		pixels := colorIndicesToPixels(message.Data, allColors)
+		g.Pixels = pixels
 	}
 }
 
-func (g *Game) PaintEnemy() {
-	for {
-		var newPixel PixelValidate
-		if err := g.Conn.ReadJSON(&newPixel); err != nil {
-			logrus.Fatal(err)
+func (g *Game) SendToSocket(pixelMsg PixelMessage) {
+	err := g.Conn.WriteJSON(pixelMsg)
+	if err != nil {
+		logrus.Error("Error sending pixel data:", err)
+	}
+}
+
+func (g *Game) PaintOnScreen(pix []byte, pixel PixelMessage) {
+	if len(pix) > 0 && pixel.IndexOfPixel < len(pix) {
+		g.Pixels[pixel.IndexOfPixel] = g.PlayerColor[0]
+		g.Pixels[pixel.IndexOfPixel+1] = g.PlayerColor[1]
+		g.Pixels[pixel.IndexOfPixel+2] = g.PlayerColor[2]
+		g.Pixels[pixel.IndexOfPixel+3] = g.PlayerColor[3]
+
+		g.SendToSocket(pixel)
+	}
+}
+
+func (g *Game) PaintPlayer() {
+	mx, my := ebiten.CursorPosition()
+	if mx >= 0 && mx < g.width && my >= 0 && my < g.height {
+		if ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) {
+			currPixel := &PixelMessage{
+				X:            mx,
+				Y:            my,
+				IndexOfPixel: g.indexOfPixel(mx, my),
+				ColorIndex:   g.ColorIndex,
+			}
+
+			currPixelUp := &PixelMessage{
+				X:            mx,
+				Y:            my + 1,
+				IndexOfPixel: g.indexOfPixel(mx, my+1),
+				ColorIndex:   g.ColorIndex,
+			}
+
+			currPixelRight := &PixelMessage{
+				X:            mx + 1,
+				Y:            my,
+				IndexOfPixel: g.indexOfPixel(mx+1, my),
+				ColorIndex:   g.ColorIndex,
+			}
+			g.PaintOnScreen(g.Pixels, *currPixel)
+			g.PaintOnScreen(g.Pixels, *currPixelUp)
+			g.PaintOnScreen(g.Pixels, *currPixelRight)
+
 		}
-		logrus.Println("Recived pixel data, currentAdress: ", g.Conn.LocalAddr())
 
-		if newPixel.X >= 0 && newPixel.X < g.World.width && newPixel.Y >= 0 && newPixel.Y < g.World.height {
-			currPixel := g.indexOfPixel(newPixel.X, newPixel.Y)
-			currPixelUp := g.indexOfPixel(newPixel.X, newPixel.Y+1)
-			currPixelRight := g.indexOfPixel(newPixel.X+1, newPixel.Y)
-
-			g.Mu.Lock()
-			g.World.PaintPixel(g.Pixels, currPixel, newPixel.X, newPixel.Y, newPixel.Color)
-			g.World.PaintPixel(g.Pixels, currPixelUp, newPixel.X, newPixel.Y+1, newPixel.Color)
-			g.World.PaintPixel(g.Pixels, currPixelRight, newPixel.X+1, newPixel.Y, newPixel.Color)
-			g.Mu.Unlock()
-
-		}
 	}
 }
 
 func (g *Game) Update() error {
-	go g.PaintEnemy()
 	go g.PaintPlayer()
-
-	g.Mu.Lock()
-	g.World.UpdatePixels(g.Pixels)
-	g.Mu.Unlock()
-
 	return nil
 }
 
 func (g *Game) Draw(screen *ebiten.Image) {
-	g.Mu.Lock()
-	g.World.CellsToPixels(g.Pixels)
-	g.Mu.Unlock()
-
+	go g.ReadFromSocket()
 	screen.WritePixels(g.Pixels)
 }
 
 func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
-	return g.World.width, g.World.height
+	return g.width, g.height
 }
 
-func NewGame(screenWidth, screenHeight int, cellColor []byte, conn *websocket.Conn) *Game {
-	game := &Game{
-		World:       NewWorld(screenWidth, screenHeight),
+func NewGame(screenWidth, screenHeight, colorIndex int, cellColor []byte, conn *websocket.Conn) *Game {
+	g := &Game{
 		Conn:        conn,
 		PlayerColor: cellColor,
-		Pixels:      make([]byte, screenWidth*screenHeight*4),
+		ColorIndex:  colorIndex,
+		Pixels:      nil,
 	}
-	return game
+	g.ReadFromSocket()
+
+	return g
 }

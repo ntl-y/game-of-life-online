@@ -1,10 +1,12 @@
 package server
 
 import (
-	"encoding/base64"
-	"log"
+	"fmt"
+	"image/color"
+	"image/color/palette"
 	"math/rand"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -13,43 +15,64 @@ import (
 )
 
 const (
-	// Time allowed to write a message to the peer.
-	writeWait = 10 * time.Second
-
-	// Time allowed to read the next pong message from the peer.
-	pongWait = 60 * time.Second
-
-	// Send pings to peer with this period. Must be less than pongWait.
+	writeWait  = 10 * time.Second
+	pongWait   = 60 * time.Second
 	pingPeriod = (pongWait * 9) / 10
 )
 
-var upgrader = websocket.Upgrader{
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
-	CheckOrigin: func(r *http.Request) bool {
-		return true
-	},
-}
+var (
+	mu       sync.Mutex
+	colorMap = make(map[Color]bool)
+	upgrader = websocket.Upgrader{
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+		CheckOrigin: func(r *http.Request) bool {
+			return true
+		},
+	}
+)
 
 type Client struct {
 	hub  *Hub
 	conn *websocket.Conn
 	send chan Message
-	id   string
 }
 
-func initColor() (color http.Header) {
-	c := []byte{
-		byte(rand.Intn(256)),
-		byte(rand.Intn(256)),
-		byte(rand.Intn(256)),
-		byte(rand.Float64() * 255),
+func init() {
+	mu.Lock()
+	defer mu.Unlock()
+
+	for _, col := range palette.Plan9 {
+		colorMap[col] = true
+	}
+}
+
+func getRandomAvailableColorIndex() int {
+	mu.Lock()
+	defer mu.Unlock()
+
+	var availableColors []color.Color
+	for col, available := range colorMap {
+		if available {
+			availableColors = append(availableColors, col)
+		}
 	}
 
-	cellColorEncoded := base64.StdEncoding.EncodeToString(c)
+	if len(availableColors) == 0 {
+		return -1
+	}
+	randIndex := rand.Intn(len(availableColors))
+	selectedColor := availableColors[randIndex]
+	colorMap[selectedColor] = false
+
+	return randIndex
+}
+
+func initColor() http.Header {
+	index := getRandomAvailableColorIndex()
 
 	responseHeader := http.Header{}
-	responseHeader.Set("Color", cellColorEncoded)
+	responseHeader.Set("Color", fmt.Sprintf("%d", index))
 	return responseHeader
 }
 
@@ -69,15 +92,10 @@ func (c *Client) readPump() {
 			}
 			break
 		}
-		c.hub.broadcast <- Message{ClientID: c.id, Data: message}
+		c.hub.broadcast <- Message{Data: message}
 	}
 }
 
-// writePump pumps messages from the hub to the websocket connection.
-//
-// A goroutine running writePump is started for each connection. The
-// application ensures that there is at most one writer to a connection by
-// executing all writes from this goroutine.
 func (c *Client) writePump() {
 	ticker := time.NewTicker(pingPeriod)
 	defer func() {
@@ -87,13 +105,8 @@ func (c *Client) writePump() {
 	for {
 		select {
 		case message, ok := <-c.send:
-
 			if !ok {
 				return
-			}
-
-			if message.ClientID == c.id {
-				continue
 			}
 
 			w, err := c.conn.NextWriter(websocket.TextMessage)
@@ -113,22 +126,17 @@ func (c *Client) writePump() {
 	}
 }
 
-func generateClientID() string {
-	return base64.StdEncoding.EncodeToString([]byte(time.Now().String() + string(rand.Int())))
-}
-
 func ServeWs(hub *Hub, c *gin.Context) {
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, initColor())
 
 	if err != nil {
-		log.Println(err)
+		logrus.Println(err)
 		return
 	}
 
 	logrus.Printf("Client connected: %s", conn.RemoteAddr().String())
 
-	clientID := generateClientID()
-	client := &Client{hub: hub, conn: conn, send: make(chan Message), id: clientID}
+	client := &Client{hub: hub, conn: conn, send: make(chan Message)}
 
 	client.hub.register <- client
 

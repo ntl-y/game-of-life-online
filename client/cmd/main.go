@@ -1,10 +1,11 @@
 package main
 
 import (
-	"encoding/base64"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 
 	"github.com/gorilla/websocket"
 	"github.com/hajimehoshi/ebiten/v2"
@@ -20,19 +21,23 @@ const (
 	screenHeight      = 48
 )
 
-func getHeaderColor(r *http.Response) ([]byte, error) {
-	cellColorEncoded := r.Header.Get("Color")
-	if cellColorEncoded == "" {
-		return nil, errors.New("Color header not found")
+var (
+	allColors = client.GetAllColors()
+)
+
+func getHeaderColor(r *http.Response) ([]byte, int, error) {
+	colorIndexStr := r.Header.Get("Color")
+	if colorIndexStr == "" {
+		return nil, 0, errors.New("Color header not found")
 	}
-	cellColor, err := base64.StdEncoding.DecodeString(cellColorEncoded)
+	colorIndex, err := strconv.Atoi(colorIndexStr)
 	if err != nil {
-		return nil, err
+		return nil, 0, fmt.Errorf("Invalid color index: %v", err)
 	}
-	if len(cellColor) != 4 {
-		return nil, errors.New("Invalid cell color length")
+	if colorIndex < 0 || colorIndex >= len(allColors) {
+		return nil, 0, errors.New("Color index out of range")
 	}
-	return cellColor, nil
+	return allColors[colorIndex], colorIndex, nil
 }
 
 func main() {
@@ -41,17 +46,16 @@ func main() {
 	ebiten.SetWindowTitle("Game of Life")
 
 	conn, respColor, err := websocket.DefaultDialer.Dial("ws://127.0.0.1:3000/", nil)
-
 	if err != nil {
 		logrus.Fatal(err)
 	}
 
-	cellColor, err := getHeaderColor(respColor)
+	cellColor, colorIndex, err := getHeaderColor(respColor)
 	if err != nil {
 		logrus.Fatal(err)
 	}
 
-	game := client.NewGame(screenWidth, screenHeight, cellColor, conn)
+	game := client.NewGame(screenWidth, screenHeight, colorIndex, cellColor, conn)
 	defer game.Conn.Close()
 
 	if err := ebiten.RunGame(game); err != nil {
