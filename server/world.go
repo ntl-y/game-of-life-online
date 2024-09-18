@@ -1,6 +1,6 @@
 package server
 
-var background = []byte{byte(0), byte(0), byte(0), byte(1)}
+var background = allColors[0]
 
 type World struct {
 	width    int

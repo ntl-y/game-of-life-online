@@ -81,29 +81,29 @@ func (g *Game) PaintPlayer() {
 	mx, my := ebiten.CursorPosition()
 	if mx >= 0 && mx < g.width && my >= 0 && my < g.height {
 		if ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) {
-			currPixel := &PixelMessage{
+			currPixel := PixelMessage{
 				X:            mx,
 				Y:            my,
 				IndexOfPixel: g.indexOfPixel(mx, my),
 				ColorIndex:   g.ColorIndex,
 			}
 
-			currPixelUp := &PixelMessage{
+			currPixelUp := PixelMessage{
 				X:            mx,
 				Y:            my + 1,
 				IndexOfPixel: g.indexOfPixel(mx, my+1),
 				ColorIndex:   g.ColorIndex,
 			}
 
-			currPixelRight := &PixelMessage{
+			currPixelRight := PixelMessage{
 				X:            mx + 1,
 				Y:            my,
 				IndexOfPixel: g.indexOfPixel(mx+1, my),
 				ColorIndex:   g.ColorIndex,
 			}
-			g.PaintOnScreen(g.Pixels, *currPixel)
-			g.PaintOnScreen(g.Pixels, *currPixelUp)
-			g.PaintOnScreen(g.Pixels, *currPixelRight)
+			g.PaintOnScreen(g.Pixels, currPixel)
+			g.PaintOnScreen(g.Pixels, currPixelUp)
+			g.PaintOnScreen(g.Pixels, currPixelRight)
 
 		}
 

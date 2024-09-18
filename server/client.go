@@ -2,8 +2,6 @@ package server
 
 import (
 	"fmt"
-	"image/color"
-	"image/color/palette"
 	"math/rand"
 	"net/http"
 	"sync"
@@ -16,14 +14,15 @@ import (
 
 const (
 	writeWait  = 10 * time.Second
-	pongWait   = 60 * time.Second
+	pongWait   = 120 * time.Second
 	pingPeriod = (pongWait * 9) / 10
 )
 
 var (
-	mu       sync.Mutex
-	colorMap = make(map[Color]bool)
-	upgrader = websocket.Upgrader{
+	mu        sync.Mutex
+	colorMap  map[string]bool
+	allColors = GetAllColors()
+	upgrader  = websocket.Upgrader{
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,
 		CheckOrigin: func(r *http.Request) bool {
@@ -39,37 +38,42 @@ type Client struct {
 }
 
 func init() {
-	mu.Lock()
-	defer mu.Unlock()
-
-	for _, col := range palette.Plan9 {
-		colorMap[col] = true
+	colorMap := make(map[string]bool)
+	for i, color := range allColors {
+		if i == 0 {
+			colorStr := string(color)
+			colorMap[colorStr] = true //skip black as background
+		}
+		colorStr := string(color)
+		colorMap[colorStr] = false
 	}
 }
 
 func getRandomAvailableColorIndex() int {
-	mu.Lock()
-	defer mu.Unlock()
-
-	var availableColors []color.Color
-	for col, available := range colorMap {
-		if available {
-			availableColors = append(availableColors, col)
+	availableIndices := make([]int, 0)
+	for i, color := range allColors {
+		colorStr := string(color)
+		if !colorMap[colorStr] {
+			availableIndices = append(availableIndices, i)
 		}
 	}
 
-	if len(availableColors) == 0 {
+	if len(availableIndices) == 0 {
 		return -1
 	}
-	randIndex := rand.Intn(len(availableColors))
-	selectedColor := availableColors[randIndex]
-	colorMap[selectedColor] = false
 
-	return randIndex
+	randomIndex := availableIndices[rand.Intn(len(availableIndices))]
+	selectedColorStr := string(allColors[randomIndex])
+	colorMap[selectedColorStr] = true
+
+	return randomIndex
 }
 
 func initColor() http.Header {
 	index := getRandomAvailableColorIndex()
+	if index == -1 {
+		return nil
+	}
 
 	responseHeader := http.Header{}
 	responseHeader.Set("Color", fmt.Sprintf("%d", index))
@@ -127,10 +131,21 @@ func (c *Client) writePump() {
 }
 
 func ServeWs(hub *Hub, c *gin.Context) {
-	conn, err := upgrader.Upgrade(c.Writer, c.Request, initColor())
+	color := initColor()
+	if color == nil {
+		c.AbortWithStatusJSON(http.StatusBadGateway, map[string]interface{}{
+			"message": "no available room for new players",
+		})
+		return
+	}
+
+	conn, err := upgrader.Upgrade(c.Writer, c.Request, color)
 
 	if err != nil {
 		logrus.Println(err)
+		c.AbortWithStatusJSON(http.StatusBadGateway, map[string]interface{}{
+			"message": err,
+		})
 		return
 	}
 

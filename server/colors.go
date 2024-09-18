@@ -41,7 +41,13 @@ var (
 )
 
 func GetAllColors() []Color {
-	return []Color{Red, Green, Blue, White, Black, Yellow, Cyan, Magenta}
+	return []Color{
+		Black, Red, Green, Blue, White, Yellow, Cyan, Magenta,
+		Orange, Pink, Purple, Brown, Gray, LightGray, DarkGray,
+		Navy, Olive, Maroon, Lime, Teal, Lavender, Gold, Silver,
+		Coral, Tomato, Salmon, SkyBlue, MidnightBlue, DarkGreen,
+		DarkRed, ForestGreen, DarkOrange, Turquoise, DeepPink, Indigo,
+	}
 }
 
 func GetRGBA(color Color) (red, green, blue, alpha byte) {

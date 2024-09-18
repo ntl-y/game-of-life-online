@@ -1,7 +1,9 @@
 package server
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -65,7 +67,7 @@ func (h *Hub) Run() {
 				logrus.Println(err)
 				continue
 			}
-			h.world.PaintPixel(h.pixelArray, pixelMsg.IndexOfPixel, pixelMsg.X, pixelMsg.Y, pixelMsg.Color)
+			h.world.PaintPixel(h.pixelArray, pixelMsg.IndexOfPixel, pixelMsg.X, pixelMsg.Y, allColors[pixelMsg.ColorIndex])
 			h.sendWorld()
 
 		case <-ticker.C:
@@ -80,7 +82,12 @@ func (h *Hub) updateWorld() {
 }
 
 func (h *Hub) sendWorld() {
-	message := Message{Data: h.pixelArray}
+	indices, err := pixelsToColorIndices(h.pixelArray)
+	if err != nil {
+		logrus.Println("Error:", err)
+		return
+	}
+	message := Message{Data: indices}
 	for client := range h.clients {
 		select {
 		case client.send <- message:
@@ -89,4 +96,28 @@ func (h *Hub) sendWorld() {
 			delete(h.clients, client)
 		}
 	}
+}
+
+func pixelsToColorIndices(pixels []byte) ([]uint8, error) {
+	indices := make([]uint8, 0, len(pixels)/4)
+
+	for i := 0; i < len(pixels); i += 4 {
+		pixel := pixels[i : i+4] // RGBA
+		index, found := findColorIndex(pixel)
+		if !found {
+			return nil, fmt.Errorf("color not found in palette")
+		}
+		indices = append(indices, index)
+	}
+
+	return indices, nil
+}
+
+func findColorIndex(pixel []byte) (uint8, bool) {
+	for i, color := range allColors {
+		if bytes.Equal(pixel, color) {
+			return uint8(i), true
+		}
+	}
+	return 0, false
 }
