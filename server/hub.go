@@ -69,6 +69,10 @@ func (h *Hub) Run() {
 			if _, ok := h.clients[client]; ok {
 				delete(h.clients, client)
 				close(client.send)
+
+				// if len(h.clients) == 0 {
+				// 	h.resetWorld()
+				// }
 			}
 		case message := <-h.broadcast:
 			var pixelMsg PixelMessage
@@ -134,4 +138,14 @@ func findColorIndex(pixel []byte) (int, bool) {
 		}
 	}
 	return 0, false
+}
+
+func (h *Hub) resetWorld() {
+	h.world = NewWorld(screenWidth, screenHeight)
+	for i := 0; i < len(h.pixelArray); i += 4 {
+		h.pixelArray[i] = 0   // R
+		h.pixelArray[i+1] = 0 // G
+		h.pixelArray[i+2] = 0 // B
+		h.pixelArray[i+3] = 1 // A
+	}
 }

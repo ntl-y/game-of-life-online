@@ -138,6 +138,8 @@ func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
 
 func NewGame(screenWidth, screenHeight, colorIndex int, cellColor []byte, conn *websocket.Conn) *Game {
 	g := &Game{
+		width:       screenWidth,
+		height:      screenHeight,
 		Conn:        conn,
 		PlayerColor: cellColor,
 		ColorIndex:  colorIndex,
