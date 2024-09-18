@@ -52,7 +52,9 @@ func colorIndicesToPixels(indices []uint8, colorPalette []Color) []byte {
 func (g *Game) ReadFromSocket() {
 	var message Message
 	if err := g.Conn.ReadJSON(&message); err != nil {
-		logrus.Error("Error sending pixel data:", err)
+		logrus.WithFields(logrus.Fields{
+			"connection": g.Conn.RemoteAddr().String(),
+		}).Error("Error receiving pixel data:", err)
 	} else {
 		pixels := colorIndicesToPixels(message.Data, allColors)
 		g.Pixels = pixels
@@ -111,12 +113,12 @@ func (g *Game) PaintPlayer() {
 }
 
 func (g *Game) Update() error {
-	go g.PaintPlayer()
+	g.PaintPlayer()
 	return nil
 }
 
 func (g *Game) Draw(screen *ebiten.Image) {
-	go g.ReadFromSocket()
+	g.ReadFromSocket()
 	screen.WritePixels(g.Pixels)
 }
 

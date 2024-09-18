@@ -20,7 +20,7 @@ const (
 
 var (
 	mu        sync.Mutex
-	colorMap  map[string]bool
+	colorMap  = make(map[string]bool)
 	allColors = GetAllColors()
 	upgrader  = websocket.Upgrader{
 		ReadBufferSize:  1024,
@@ -38,7 +38,9 @@ type Client struct {
 }
 
 func init() {
-	colorMap := make(map[string]bool)
+	mu.Lock()
+	defer mu.Unlock()
+
 	for i, color := range allColors {
 		if i == 0 {
 			colorStr := string(color)
@@ -50,6 +52,8 @@ func init() {
 }
 
 func getRandomAvailableColorIndex() int {
+	mu.Lock()
+	defer mu.Unlock()
 	availableIndices := make([]int, 0)
 	for i, color := range allColors {
 		colorStr := string(color)
