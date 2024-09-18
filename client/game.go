@@ -2,6 +2,7 @@ package client
 
 import (
 	"sync"
+	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/hajimehoshi/ebiten/v2"
@@ -12,9 +13,9 @@ var (
 	allColors = GetAllColors()
 )
 
-type Message struct {
+type IndicesMessage struct {
 	//slice of color indices
-	Data []uint8
+	Data []int `json:"Data"`
 }
 
 type PixelMessage struct {
@@ -38,7 +39,7 @@ func (g *Game) indexOfPixel(x, y int) int {
 	return (y*g.width + x) * 4
 }
 
-func colorIndicesToPixels(indices []uint8, colorPalette []Color) []byte {
+func colorIndicesToPixels(indices []int, colorPalette []Color) []byte {
 	pixels := make([]byte, 0, len(indices)*4)
 
 	for _, index := range indices {
@@ -50,14 +51,23 @@ func colorIndicesToPixels(indices []uint8, colorPalette []Color) []byte {
 }
 
 func (g *Game) ReadFromSocket() {
-	var message Message
-	if err := g.Conn.ReadJSON(&message); err != nil {
-		logrus.WithFields(logrus.Fields{
-			"connection": g.Conn.RemoteAddr().String(),
-		}).Error("Error receiving pixel data:", err)
-	} else {
-		pixels := colorIndicesToPixels(message.Data, allColors)
-		g.Pixels = pixels
+	var message IndicesMessage
+	done := make(chan bool)
+
+	go func() {
+		if err := g.Conn.ReadJSON(&message); err != nil {
+		} else {
+			pixels := colorIndicesToPixels(message.Data, allColors)
+			g.Pixels = pixels
+			done <- true
+		}
+	}()
+
+	select {
+	case <-done:
+		logrus.Println("Received initial world data successfully.")
+	case <-time.After(time.Second * 5):
+		logrus.Error("Timeout waiting for initial world data")
 	}
 }
 

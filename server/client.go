@@ -32,9 +32,10 @@ var (
 )
 
 type Client struct {
-	hub  *Hub
-	conn *websocket.Conn
-	send chan Message
+	hub     *Hub
+	conn    *websocket.Conn
+	send    chan []byte
+	recieve chan []byte
 }
 
 func init() {
@@ -100,7 +101,7 @@ func (c *Client) readPump() {
 			}
 			break
 		}
-		c.hub.broadcast <- Message{Data: message}
+		c.hub.broadcast <- message
 	}
 }
 
@@ -121,7 +122,7 @@ func (c *Client) writePump() {
 			if err != nil {
 				return
 			}
-			w.Write(message.Data)
+			w.Write(message)
 
 			if err := w.Close(); err != nil {
 				return
@@ -155,7 +156,7 @@ func ServeWs(hub *Hub, c *gin.Context) {
 
 	logrus.Printf("Client connected: %s", conn.RemoteAddr().String())
 
-	client := &Client{hub: hub, conn: conn, send: make(chan Message)}
+	client := &Client{hub: hub, conn: conn, send: make(chan []byte)}
 
 	client.hub.register <- client
 

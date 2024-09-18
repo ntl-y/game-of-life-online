@@ -3,7 +3,7 @@ package server
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
+	"errors"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -14,9 +14,9 @@ const (
 	screenHeight = 48
 )
 
-type Message struct {
+type IndicesMessage struct {
 	//slice of color indices
-	Data []uint8
+	Data []int `json:"Data"`
 }
 
 type PixelMessage struct {
@@ -28,7 +28,7 @@ type PixelMessage struct {
 
 type Hub struct {
 	clients    map[*Client]bool
-	broadcast  chan Message
+	broadcast  chan []byte
 	register   chan *Client
 	unregister chan *Client
 	world      *World
@@ -36,25 +36,35 @@ type Hub struct {
 }
 
 func NewHub() *Hub {
-	return &Hub{
+	h := &Hub{
 		register:   make(chan *Client),
 		unregister: make(chan *Client),
 		clients:    make(map[*Client]bool),
-		broadcast:  make(chan Message),
+		broadcast:  make(chan []byte),
 		world:      NewWorld(screenWidth, screenHeight),
 		pixelArray: make([]byte, screenWidth*screenHeight*4),
 	}
+
+	for i := 0; i < len(h.pixelArray); i += 4 {
+		h.pixelArray[i] = 0   // R
+		h.pixelArray[i+1] = 0 // G
+		h.pixelArray[i+2] = 0 // B
+		h.pixelArray[i+3] = 1 // A
+	}
+
+	return h
 }
 
 func (h *Hub) Run() {
-	ticker := time.NewTicker(time.Second / 20)
-	defer ticker.Stop()
+	updateTicker := time.NewTicker(time.Second / 20)
+	defer updateTicker.Stop()
 
+	go h.sendWorld()
 	for {
 		select {
 		case client := <-h.register:
 			h.clients[client] = true
-
+			h.sendWorld()
 		case client := <-h.unregister:
 			if _, ok := h.clients[client]; ok {
 				delete(h.clients, client)
@@ -62,7 +72,7 @@ func (h *Hub) Run() {
 			}
 		case message := <-h.broadcast:
 			var pixelMsg PixelMessage
-			err := json.Unmarshal(message.Data, &pixelMsg)
+			err := json.Unmarshal(message, &pixelMsg)
 			if err != nil {
 				logrus.Println(err)
 				continue
@@ -70,7 +80,7 @@ func (h *Hub) Run() {
 			h.world.PaintPixel(h.pixelArray, pixelMsg.IndexOfPixel, pixelMsg.X, pixelMsg.Y, allColors[pixelMsg.ColorIndex])
 			h.sendWorld()
 
-		case <-ticker.C:
+		case <-updateTicker.C:
 			h.updateWorld()
 		}
 	}
@@ -87,7 +97,11 @@ func (h *Hub) sendWorld() {
 		logrus.Println("Error:", err)
 		return
 	}
-	message := Message{Data: indices}
+	message, err := json.Marshal(IndicesMessage{Data: indices})
+	if err != nil {
+		logrus.Println("Error:", err)
+		return
+	}
 	for client := range h.clients {
 		select {
 		case client.send <- message:
@@ -98,14 +112,14 @@ func (h *Hub) sendWorld() {
 	}
 }
 
-func pixelsToColorIndices(pixels []byte) ([]uint8, error) {
-	indices := make([]uint8, 0, len(pixels)/4)
+func pixelsToColorIndices(pixels []byte) ([]int, error) {
+	indices := make([]int, 0, len(pixels)/4)
 
 	for i := 0; i < len(pixels); i += 4 {
 		pixel := pixels[i : i+4] // RGBA
 		index, found := findColorIndex(pixel)
 		if !found {
-			return nil, fmt.Errorf("color not found in palette")
+			return nil, errors.New("color not found in palette")
 		}
 		indices = append(indices, index)
 	}
@@ -113,10 +127,10 @@ func pixelsToColorIndices(pixels []byte) ([]uint8, error) {
 	return indices, nil
 }
 
-func findColorIndex(pixel []byte) (uint8, bool) {
+func findColorIndex(pixel []byte) (int, bool) {
 	for i, color := range allColors {
 		if bytes.Equal(pixel, color) {
-			return uint8(i), true
+			return i, true
 		}
 	}
 	return 0, false
