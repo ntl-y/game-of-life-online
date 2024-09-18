@@ -109,7 +109,7 @@ func (h *Hub) sendWorld() {
 	for client := range h.clients {
 		select {
 		case client.send <- message:
-		default:
+		case <-time.After(time.Second * 5):
 			close(client.send)
 			delete(h.clients, client)
 		}
